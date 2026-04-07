@@ -1,0 +1,9 @@
+[project]
+name = "openenv-codereview"
+version = "0.1.0"
+description = "OpenEnv Code Review Environment"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.backends.legacy:BuildBackend"
