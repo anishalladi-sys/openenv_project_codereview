@@ -1,0 +1,88 @@
+metadata:
+  name: "Code Review Environment"
+  description: "An RL environment where an AI agent reviews code snippets and identifies bugs. Tasks span Easy (syntax), Medium (logic), and Hard (improvement) levels."
+  version: "1.0.0"
+  author: "OpenEnv Hackathon"
+  tags:
+    - "openenv"
+    - "code-review"
+    - "rl-environment"
+    - "ai-agent"
+
+tasks:
+  - name: "syntax_review"
+    description: "Find syntax errors in Python code (missing colons, indentation issues, undefined variables)"
+    difficulty: "easy"
+    num_snippets: 5
+    grader: "deterministic"
+    reward_range: [0.0, 1.0]
+    
+  - name: "logic_review"
+    description: "Find logical bugs in Python code (off-by-one, wrong conditions, incorrect loops)"
+    difficulty: "medium"
+    num_snippets: 5
+    grader: "deterministic"
+    reward_range: [0.0, 1.0]
+    
+  - name: "improvement_review"
+    description: "Suggest code improvements for Pythonic and efficient implementations"
+    difficulty: "hard"
+    num_snippets: 5
+    grader: "deterministic"
+    reward_range: [0.0, 1.0]
+
+action_space:
+  type: "structured"
+  fields:
+    - name: "review_comment"
+      type: "string"
+      description: "Comment about the code or issue found"
+      
+    - name: "bug_location"
+      type: "string"
+      description: "Optional line number or location descriptor"
+      
+    - name: "severity"
+      type: "string"
+      description: "Severity level: critical, major, minor, or none"
+      options: ["critical", "major", "minor", "none"]
+
+observation_space:
+  type: "structured"
+  fields:
+    - name: "code_snippet"
+      type: "string"
+      description: "Python code snippet to review"
+      
+    - name: "task_type"
+      type: "string"
+      description: "Type of task: syntax_review, logic_review, or improvement_review"
+      
+    - name: "feedback"
+      type: "string"
+      description: "Feedback from previous steps"
+      
+    - name: "step"
+      type: "integer"
+      description: "Current step number in episode"
+
+reward_function:
+  type: "incremental"
+  description: "Reward given at each step based on correctness of review"
+  scale: "[0.0, 1.0]"
+  criteria:
+    - "Accuracy of bug detection for syntax/logic tasks"
+    - "Quality and specificity of suggestions for improvement task"
+    - "Correct line/location identification"
+
+environment_config:
+  max_steps_per_episode: 5
+  observation_type: "pydantic"
+  action_type: "pydantic"
+  reward_type: "float"
+  deterministic: true
+
+baseline_performance:
+  syntax_review: 0.75
+  logic_review: 0.65
+  improvement_review: 0.70
