@@ -20,5 +20,8 @@ COPY README.md .
 # Make inference.py executable
 RUN chmod +x inference.py
 
-# Default command
-CMD ["python", "inference.py", "--task", "syntax_review", "--steps", "5"]
+# Expose port for HuggingFace Spaces
+EXPOSE 7860
+
+# Run FastAPI server using uvicorn
+CMD ["uvicorn", "inference:app", "--host", "0.0.0.0", "--port", "7860"]

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-OpenEnv Code Review - Inference Script
+OpenEnv Code Review - Inference Script with FastAPI Server
 Runs an AI agent through the code review environment.
 
-Usage:
+Usage as standalone script:
     python inference.py --task syntax_review --steps 5
+
+Usage as FastAPI server (for HuggingFace Spaces):
+    uvicorn inference:app --host 0.0.0.0 --port 7860
     
 Environment Variables:
     API_BASE_URL: API endpoint (default: https://api-inference.huggingface.co/v1)
@@ -17,7 +20,15 @@ import sys
 import json
 import argparse
 import traceback
-from typing import Optional
+from typing import Optional, Dict, Any
+
+# Import FastAPI
+try:
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel as PydanticModel
+except ImportError:
+    print("[ERROR] FastAPI not found. Install with: pip install fastapi uvicorn", file=sys.stderr)
+    sys.exit(1)
 
 # Import environment
 from environment import (
@@ -33,6 +44,120 @@ except ImportError:
     print("[ERROR] OpenAI library not found. Install with: pip install openai", file=sys.stderr)
     sys.exit(1)
 
+# ============================================================================
+# FASTAPI APP SETUP
+# ============================================================================
+
+app = FastAPI(title="OpenEnv Code Review Server", version="1.0.0")
+
+# Global state for FastAPI server
+class ServerState:
+    def __init__(self):
+        self.env: Optional[CodeReviewEnvironment] = None
+        self.current_observation: Optional[Observation] = None
+        self.config: Dict[str, Any] = {}
+        self.client: Optional[OpenAI] = None
+
+server_state = ServerState()
+
+# Pydantic models for API
+class ObservationResponse(PydanticModel):
+    code_snippet: str
+    task_type: str
+    feedback: Optional[str] = None
+    step: int
+
+class ActionRequest(PydanticModel):
+    review_comment: str
+    bug_location: Optional[str] = None
+    severity: Optional[str] = None
+
+class StepResponse(PydanticModel):
+    observation: Optional[Dict[str, Any]] = None
+    reward: Optional[float] = None
+    done: bool
+    info: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+
+# ============================================================================
+# FASTAPI ENDPOINTS
+# ============================================================================
+
+@app.get("/")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "ok"}
+
+
+@app.post("/reset")
+async def reset_endpoint():
+    """Reset the environment and return initial observation"""
+    try:
+        # Reload config if needed
+        if not server_state.config:
+            server_state.config = get_config()
+            server_state.client = create_client(server_state.config)
+        
+        # Create environment
+        server_state.env = CodeReviewEnvironment(
+            task_type="syntax_review",
+            max_steps=5
+        )
+        
+        # Reset and get observation
+        observation = server_state.env.reset()
+        server_state.current_observation = observation
+        
+        return {
+            "status": "ok",
+            "observation": observation.dict() if observation else {}
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/step")
+async def step_endpoint(action: ActionRequest):
+    """Execute one step with the given action"""
+    try:
+        if not server_state.env:
+            raise ValueError("Environment not initialized. Call /reset first.")
+        
+        if not server_state.current_observation:
+            raise ValueError("No current observation. Call /reset first.")
+        
+        # Convert request to Action
+        api_action = Action(
+            review_comment=action.review_comment,
+            bug_location=action.bug_location,
+            severity=action.severity or "none",
+        )
+        
+        # Execute step
+        observation, reward, done, info = server_state.env.step(api_action)
+        server_state.current_observation = observation
+        
+        return {
+            "observation": observation.dict() if observation else {},
+            "reward": reward.value if reward else 0.0,
+            "done": done,
+            "info": info,
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "observation": None,
+            "reward": 0.0,
+            "done": True,
+            "info": {"error": str(e)},
+            "error": str(e)
+        }
+
+
+# ============================================================================
+# CONFIGURATION & CLIENT
+# ============================================================================
 
 def get_config():
     """Load configuration from environment variables"""
